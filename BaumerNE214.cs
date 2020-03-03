@@ -5,12 +5,12 @@ using System.IO.Ports;
 using System.Windows.Forms;
 using System.Text.RegularExpressions;
 
-namespace KaliteKontrol.cls
+namespace QualityControl.cls
 {
     class BaumerNE214 : IIndikator
     {
-        string GelenDeger = "";
-        private string BaglantiMetre = "";
+        string ReturnedValue = "";
+        private string MeterRead = "";
         public BaumerNE214()
         {
             try
@@ -25,26 +25,26 @@ namespace KaliteKontrol.cls
             }
 
         }
-        string Başarı = "";
-        string Yon = "";
+        string SuccessValue = "";
+        string _Direction = "";
         private void Sp_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
             try
             {
-                string test = ((SerialPort)sender).ReadExisting();
-                if (test.IndexOf("0001R") == -1)
-                    Başarı = test;
-                else if (test.IndexOf("0001R") != -1)
-                    Yon = test.Substring(test.IndexOf("R") + 1);
+                string ReadedValue = ((SerialPort)sender).ReadExisting();
+                if (SuccessValue.IndexOf("0001R") == -1)
+                    SuccessValue = ReadedValue;
+                else if (ReadedValue.IndexOf("0001R") != -1)
+                    _Direction = ReadedValue.Substring(SuccessValue.IndexOf("R") + 1);
 
-                if (Başarı.IndexOf("0001R") == -1 && !string.IsNullOrEmpty(Başarı))
+                if (SuccessValue.IndexOf("0001R") == -1 && !string.IsNullOrEmpty(SuccessValue))
                 {
                     Regex r = new Regex(@".*[\d]");
-                    Match M = r.Match(Başarı);
-                    string Değer = M.Value;
+                    Match M = r.Match(SuccessValue);
+                    string Value = M.Value;
 
-                    if (double.TryParse(Yon + Değer, out double SonDeger))
-                        Metre = SonDeger;
+                    if (double.TryParse(_Direction + Value, out double LastValue))
+                        Meter = LastValue;
                 }
             }
             catch
@@ -52,22 +52,22 @@ namespace KaliteKontrol.cls
             }
         }
 
-        public override void MetreOku()
+        public override void MeterOku()
         {
-            if (Durum != BaglantiDurumlari.Acik)
+            if (Status != ConnectionStatus.Opened)
             {
                 Bits_Per_Second = 4800;
                 Data_Bits = 7;
-                Port_No = clsAyar.MetrePortAdi;
+                Port_No = clsAyar.MeterPortAdi;
                 Parity = System.IO.Ports.Parity.Even;
                 Stop_Bits = StopBits.One;
 
-                Baglan();
-                if (Durum != BaglantiDurumlari.Acik)
+                Connect();
+                if (Status != ConnectionStatus.Opened)
                     return;
             }
 
-            clsGenel.MetreBaglanti = "";
+            clsGeneral.MeterConnect = "";
             Sp.DiscardInBuffer();
             Sp.DiscardOutBuffer();
             Sp.DataReceived -= Sp_DataReceived;
@@ -78,61 +78,50 @@ namespace KaliteKontrol.cls
         }
 
 
-        public override void TartiOku()
+        public override void ManuelProcess(string Islem, string PlcCommand)
         {
-            Kilo = 0;
-        }
-
-        public override void GecikmeliYazdirBitir()
-        { }
-
-        public override void EnOku()
-        { }
-
-        public override void ManuelIslem(string Islem, string PlcKomut)
-        {
-            if (Durum != BaglantiDurumlari.Acik)
+            if (Status != ConnectionStatus.Opened)
             {
                 Bits_Per_Second = 4800;
                 Data_Bits = 7;
                 Parity = System.IO.Ports.Parity.Even;
                 Stop_Bits = StopBits.One;
-                Baglan();
-                if (Durum != BaglantiDurumlari.Acik)
+                Connect();
+                if (Status != ConnectionStatus.Opened)
                     return;
             }
-            BaglantiMetre = Sp.ReadExisting();
+            MeterRead = Sp.ReadExisting();
 
-            if (BaglantiMetre == "")
+            if (MeterRead == "")
             {
-                Durum = BaglantiDurumlari.Hata;
-                clsMesaj.HataTanim = "Bağlantı Sorunu";
-                clsGenel.MetreBaglanti = "!";
-                Metre = 0;
+                Status = ConnectionStatus.Error;
+                clsMessage.ErrorTanim = "Connection Problem";
+                clsGeneral.MeterConnect = "!";
+                Meter = 0;
                 Sp.Close();
                 return;
             }
             else
             {
-                if (Durum != BaglantiDurumlari.Acik)
+                if (Status != ConnectionStatus.Opened)
                 {
                     Bits_Per_Second = 4800;
                     Data_Bits = 7;
                     Parity = System.IO.Ports.Parity.Even;
                     Stop_Bits = StopBits.One;
-                    Baglan();
-                    if (Durum != BaglantiDurumlari.Acik)
+                    Connect();
+                    if (Status != ConnectionStatus.Opened)
                         return;
                 }
 
-                if (clsAyar.MetreFormat.Length > BaglantiMetre.Length) return;
-                if (!clsGenel.TurmetreYaz(Sp, "metre", PlcKomut, out GelenDeger)) return;
-                clsGenel.MetreBaglanti = "";
+                if (clsAyar.MeterFormat.Length > MeterRead.Length) return;
+                if (!clsGeneral.WriteMeterIndicator(Sp, "Meter", PlcCommand, out ReturnedValue)) return;
+                clsGeneral.MeterConnect = "";
             }
 
             try
             {
-                Metre = GelenDeger.ToDouble();
+                Meter = ReturnedValue.ToDouble();
                 Sp.DiscardInBuffer();
             }
             catch { }
@@ -140,36 +129,6 @@ namespace KaliteKontrol.cls
             Sp.DiscardOutBuffer();
         }
 
-        public override string ManuelOku(string Islem, string PlcKomut)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override int GecikmeliYazdirOku()
-        {
-            //throw new NotImplementedException();
-            return 0;
-        }
-
-        public override void GecikmeliYazdir(float TopNo)
-        {
-            //throw new NotImplementedException();
-
-        }
-
-        public override void StaticsYenile()
-        {
-            throw new NotImplementedException();
-        }
-
-        public override void YukelemeEmriver(int TopID, int LabNumuneID, int MusteriNumuneID, int LabNumuneCM, int MusteriNumuneCM, int KaliteSirasi, int YuklemeAdres)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override void Devir(bool DevrilsinMi)
-        {
-            throw new NotImplementedException();
-        }
+        
     }
 }
